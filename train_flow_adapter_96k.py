@@ -49,8 +49,21 @@ class FlowDataset(Dataset):
         if 'pickup_grid' not in df.columns:
             df = self._compute_grids(df)
 
+        # Get all unique grids
         all_grids = set(df['pickup_grid'].unique()) | set(df['dropoff_grid'].unique())
-        all_grids = sorted(list(all_grids))[:self.n_tiles]
+        all_grids = sorted(list(all_grids))
+
+        # If we have more grids than n_tiles, select top-k by frequency
+        if len(all_grids) > self.n_tiles * self.n_tiles:
+            # Count frequency of each grid
+            pickup_counts = df['pickup_grid'].value_counts()
+            dropoff_counts = df['dropoff_grid'].value_counts()
+            total_counts = pickup_counts.add(dropoff_counts, fill_value=0)
+
+            # Select top n_tiles^2 most frequent grids
+            top_grids = total_counts.nlargest(self.n_tiles * self.n_tiles).index.tolist()
+            all_grids = sorted(top_grids)
+
         return {grid: idx for idx, grid in enumerate(all_grids)}
 
     def _compute_grids(self, df):
@@ -79,6 +92,14 @@ class FlowDataset(Dataset):
         flow_tensor = np.zeros((T, self.n_tiles, self.n_tiles, 2), dtype=np.float32)
         intent_dist = np.zeros((T, self.n_intents), dtype=np.float32)
 
+        # Create reverse mapping: idx -> (row, col) in n_tiles x n_tiles grid
+        idx_to_grid = {v: k for k, v in self.grid_to_idx.items()}
+        n_grids = len(idx_to_grid)
+
+        # Map linear indices to 2D grid positions
+        # We'll map indices 0..n_grids-1 to a sqrt(n_grids) x sqrt(n_grids) grid
+        grid_dim = int(np.ceil(np.sqrt(n_grids)))
+
         for t, time_bin in enumerate(tqdm(time_bins, desc="Building tensor")):
             bin_df = df[df['time_bin'] == time_bin]
 
@@ -91,8 +112,15 @@ class FlowDataset(Dataset):
                     o_idx = self.grid_to_idx[o_grid]
                     d_idx = self.grid_to_idx[d_grid]
 
-                    flow_tensor[t, o_idx, d_idx, 0] += 1
-                    flow_tensor[t, o_idx, d_idx, 1] += 1
+                    # Map to 2D positions
+                    o_row, o_col = o_idx // self.n_tiles, o_idx % self.n_tiles
+                    d_row, d_col = d_idx // self.n_tiles, d_idx % self.n_tiles
+
+                    # Accumulate flows (outflow from origin, inflow to destination)
+                    if o_row < self.n_tiles and o_col < self.n_tiles:
+                        flow_tensor[t, o_row, o_col, 0] += 1  # outflow
+                    if d_row < self.n_tiles and d_col < self.n_tiles:
+                        flow_tensor[t, d_row, d_col, 1] += 1  # inflow
 
                 intent_dist[t, intent] += 1
 
