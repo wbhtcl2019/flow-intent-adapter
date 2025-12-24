@@ -177,9 +177,14 @@ class DCRNNDecoder(nn.Module):
         self.num_layers = num_layers
 
         # Stack of DCGRU cells
+        # First layer takes output_dim, rest take hidden_dim
         self.dcgru_cells = nn.ModuleList([
-            DCGRUCell(output_dim, hidden_dim, num_nodes, K)
-            for _ in range(num_layers)
+            DCGRUCell(
+                output_dim if i == 0 else hidden_dim,
+                hidden_dim,
+                num_nodes,
+                K
+            ) for i in range(num_layers)
         ])
 
         # Output projection
