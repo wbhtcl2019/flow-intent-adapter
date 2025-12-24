@@ -226,9 +226,17 @@ def train_epoch(model, train_loader, optimizer, criterion, device, args, graph_s
 
     pbar = tqdm(train_loader, desc="Training")
     for batch in pbar:
-        X_closeness = batch['X_closeness'].to(device)
-        Y_true = batch['Y'].to(device)
-        intent_label = batch['intent'].to(device) if args.use_flow else None
+        # FlowDataset returns: 'closeness', 'target', 'intent_dist', 'intent_label'
+        X_closeness = batch['closeness'].to(device)  # [B, 2, T, H, W]
+        Y_true = batch['target'].to(device)  # [B, 2, H, W]
+        intent_label = batch['intent_label'].to(device) if args.use_flow else None
+
+        # Reshape X_closeness: [B, 2, T, H, W] -> [B, T, H, W, 2]
+        B, C, T, H, W = X_closeness.shape
+        X_closeness = X_closeness.permute(0, 2, 3, 4, 1)  # [B, T, H, W, 2]
+
+        # Reshape Y_true: [B, 2, H, W] -> [B, H, W, 2]
+        Y_true = Y_true.permute(0, 2, 3, 1)  # [B, H, W, 2]
 
         optimizer.zero_grad()
 
@@ -282,9 +290,15 @@ def validate_epoch(model, val_loader, criterion, device, args, graph_structure=N
 
     with torch.no_grad():
         for batch in val_loader:
-            X_closeness = batch['X_closeness'].to(device)
-            Y_true = batch['Y'].to(device)
-            intent_label = batch['intent'].to(device) if args.use_flow else None
+            # FlowDataset returns: 'closeness', 'target', 'intent_dist', 'intent_label'
+            X_closeness = batch['closeness'].to(device)
+            Y_true = batch['target'].to(device)
+            intent_label = batch['intent_label'].to(device) if args.use_flow else None
+
+            # Reshape
+            B, C, T, H, W = X_closeness.shape
+            X_closeness = X_closeness.permute(0, 2, 3, 4, 1)  # [B, T, H, W, 2]
+            Y_true = Y_true.permute(0, 2, 3, 1)  # [B, H, W, 2]
 
             # Forward
             Y_pred, _ = forward_pass(model, X_closeness, intent_label, Y_true, graph_structure, args)
@@ -317,8 +331,13 @@ def evaluate(model, val_loader, device, args, graph_structure=None):
 
     with torch.no_grad():
         for batch in val_loader:
-            X_closeness = batch['X_closeness'].to(device)
-            Y_true = batch['Y'].to(device)
+            X_closeness = batch['closeness'].to(device)
+            Y_true = batch['target'].to(device)
+
+            # Reshape
+            B, C, T, H, W = X_closeness.shape
+            X_closeness = X_closeness.permute(0, 2, 3, 4, 1)  # [B, T, H, W, 2]
+            Y_true = Y_true.permute(0, 2, 3, 1)  # [B, H, W, 2]
 
             # Forward pass (no intent at evaluation)
             Y_pred, _ = forward_pass(model, X_closeness, None, Y_true, graph_structure, args)
@@ -376,9 +395,25 @@ def main():
 
     # Load data
     print(f"\nLoading data from {args.data_path}...")
-    train_dataset = FlowDataset(args.data_path, split='train', n_tiles=args.n_tiles,
+    df = pd.read_parquet(args.data_path)
+    print(f"Total trips: {len(df):,}")
+
+    # Split data: 70% train, 15% val, 15% test
+    n_samples = len(df)
+    train_size = int(0.7 * n_samples)
+    val_size = int(0.15 * n_samples)
+
+    df_train = df.iloc[:train_size]
+    df_val = df.iloc[train_size:train_size+val_size]
+
+    print(f"Train trips: {len(df_train):,}")
+    print(f"Val trips: {len(df_val):,}")
+
+    # Create datasets
+    print("\nBuilding datasets...")
+    train_dataset = FlowDataset(df_train, n_tiles=args.n_tiles,
                                 closeness_len=args.closeness_len)
-    val_dataset = FlowDataset(args.data_path, split='val', n_tiles=args.n_tiles,
+    val_dataset = FlowDataset(df_val, n_tiles=args.n_tiles,
                              closeness_len=args.closeness_len)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
