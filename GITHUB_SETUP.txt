@@ -1,0 +1,68 @@
+============================================
+📦 GitHub上传步骤
+============================================
+
+✅ Git仓库已初始化
+✅ 所有文件已提交
+
+--------------------------------------------
+下一步：创建GitHub仓库并推送
+--------------------------------------------
+
+1. 打开浏览器，访问：
+   https://github.com/new
+
+2. 填写信息：
+   - Repository name: flow-intent-adapter
+   - Description: Flow Intent Adapter for Traffic Prediction (KDD 2025)
+   - Private ✓ (推荐，论文发表前)
+   - 不要勾选 "Add a README file"
+   - 点击 "Create repository"
+
+3. 复制GitHub给出的命令（第二组命令）：
+
+   git remote add origin https://github.com/YOUR_USERNAME/flow-intent-adapter.git
+   git branch -M main
+   git push -u origin main
+
+4. 在 C:\coding\PhD-DS\didi-code\colab_upload 文件夹中打开终端
+   运行上面的3条命令（替换YOUR_USERNAME为你的GitHub用户名）
+
+--------------------------------------------
+推送成功后
+--------------------------------------------
+
+在Colab中使用：
+
+```python
+# Clone仓库
+!git clone https://github.com/YOUR_USERNAME/flow-intent-adapter.git
+%cd flow-intent-adapter
+
+# 安装依赖
+!pip install -r requirements.txt
+
+# 开始训练
+!python train_baselines.py --model dcrnn --epochs 100
+```
+
+--------------------------------------------
+如果需要更新代码
+--------------------------------------------
+
+本地修改后：
+cd C:\coding\PhD-DS\didi-code\colab_upload
+git add .
+git commit -m "Update: description of changes"
+git push
+
+Colab中拉取更新：
+cd flow-intent-adapter
+!git pull
+
+--------------------------------------------
+完成！
+--------------------------------------------
+
+你的项目已经准备好上传GitHub了！
+按照上面的步骤操作即可。
