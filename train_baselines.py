@@ -33,7 +33,8 @@ from train_flow_adapter_96k import FlowDataset
 from baselines.dcrnn_baseline import DCRNNWithFlowAdapter, construct_adj_matrix
 from baselines.stgcn_baseline import STGCNWithFlowAdapter, construct_graph_from_grid
 from baselines.stformer_baseline import STFormerWithFlowAdapter
-from st_resnet_baseline import STResNet, STResNetWithFlowAdapter
+from st_resnet_baseline import STResNet
+from train_flow_adapter_96k import STResNetWithFlowAdapter
 
 
 def get_model(args, device):
