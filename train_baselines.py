@@ -398,14 +398,13 @@ def main():
     df = pd.read_parquet(args.data_path)
     print(f"Total trips: {len(df):,}")
 
-    # Split data: 70% train, 15% val, 15% test
+    # Split data: 85% train, 15% val (use all data)
     n_samples = len(df)
-    train_size = int(0.7 * n_samples)
-    val_size = int(0.15 * n_samples)
+    train_size = int(0.85 * n_samples)
 
     # IMPORTANT: Use .copy() to prevent SettingWithCopyWarning in _compute_grids
     df_train = df.iloc[:train_size].copy()
-    df_val = df.iloc[train_size:train_size+val_size].copy()
+    df_val = df.iloc[train_size:].copy()
 
     print(f"Train trips: {len(df_train):,}")
     print(f"Val trips: {len(df_val):,}")
