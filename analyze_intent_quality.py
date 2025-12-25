@@ -56,16 +56,23 @@ def analyze_intent_characteristics(df):
     print("INTENT CHARACTERISTICS")
     print("=" * 80)
 
-    # Calculate trip distance and duration
+    # Calculate trip distance
     df['distance_km'] = np.sqrt(
         (df['dropoff_latitude'] - df['pickup_latitude'])**2 +
         (df['dropoff_longitude'] - df['pickup_longitude'])**2
     ) * 111  # Approximate km
 
-    df['duration_min'] = df['trip_duration'] / 60
+    # Check which columns exist
+    has_duration = 'trip_duration' in df.columns
+    has_passengers = 'passenger_count' in df.columns
 
     print("\nCharacteristics by Intent:")
-    print(f"{'Intent':<8} {'Count':<10} {'Dist(km)':<12} {'Duration(min)':<15} {'Passengers':<12}")
+    header = f"{'Intent':<8} {'Count':<10} {'Dist(km)':<12}"
+    if has_duration:
+        header += f" {'Duration(min)':<15}"
+    if has_passengers:
+        header += f" {'Passengers':<12}"
+    print(header)
     print("-" * 80)
 
     for intent in sorted(df['intent_category'].unique()):
@@ -74,14 +81,20 @@ def analyze_intent_characteristics(df):
         count = len(intent_df)
         dist_mean = intent_df['distance_km'].mean()
         dist_std = intent_df['distance_km'].std()
-        dur_mean = intent_df['duration_min'].mean()
-        dur_std = intent_df['duration_min'].std()
-        pass_mean = intent_df['passenger_count'].mean()
 
-        print(f"{intent:<8} {count:<10,} "
-              f"{dist_mean:>5.2f}±{dist_std:<4.2f} "
-              f"{dur_mean:>6.1f}±{dur_std:<5.1f} "
-              f"{pass_mean:>5.2f}")
+        line = f"{intent:<8} {count:<10,} {dist_mean:>5.2f}±{dist_std:<4.2f}"
+
+        if has_duration:
+            df['duration_min'] = df['trip_duration'] / 60
+            dur_mean = intent_df['duration_min'].mean()
+            dur_std = intent_df['duration_min'].std()
+            line += f" {dur_mean:>6.1f}±{dur_std:<5.1f}"
+
+        if has_passengers:
+            pass_mean = intent_df['passenger_count'].mean()
+            line += f" {pass_mean:>5.2f}"
+
+        print(line)
 
     # Test for separability
     print("\n" + "=" * 80)
