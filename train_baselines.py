@@ -403,8 +403,9 @@ def main():
     train_size = int(0.7 * n_samples)
     val_size = int(0.15 * n_samples)
 
-    df_train = df.iloc[:train_size]
-    df_val = df.iloc[train_size:train_size+val_size]
+    # IMPORTANT: Use .copy() to prevent SettingWithCopyWarning in _compute_grids
+    df_train = df.iloc[:train_size].copy()
+    df_val = df.iloc[train_size:train_size+val_size].copy()
 
     print(f"Train trips: {len(df_train):,}")
     print(f"Val trips: {len(df_val):,}")
