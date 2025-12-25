@@ -326,33 +326,38 @@ class DCRNNWithFlowAdapter(nn.Module):
             H_enc = self.dcrnn.encoder(X, adj_matrix)
             # H_enc: [num_layers, batch, num_nodes, hidden_dim]
 
-            # Modulate each layer's hidden state
+            # Apply adapter once per batch (like ST-ResNet)
+            # Use first layer's hidden state as representative features
+            H_layer = H_enc[0]  # [batch, num_nodes, hidden_dim]
+            batch_size, num_nodes, hidden_dim = H_layer.shape
+
+            # Global spatial aggregation: average pool across all nodes
+            H_global = H_layer.mean(dim=1)  # [batch, hidden_dim]
+
+            # Apply flow adapter ONCE per batch (not per node!)
+            # This generates intent-conditioned modulation parameters
+            H_modulated_global, adapter_losses = self.adapter(
+                H_global,
+                intent_label
+            )
+
+            # Extract FiLM parameters from modulated features
+            # γ (gamma) for scaling, β (beta) for shifting
+            gamma = H_modulated_global.unsqueeze(1)  # [batch, 1, hidden_dim]
+            beta = H_global.unsqueeze(1) - H_modulated_global.unsqueeze(1)  # Residual shift
+
+            # Apply FiLM modulation to all layers
             H_modulated = []
             for layer_idx in range(self.num_layers):
                 H_layer = H_enc[layer_idx]  # [batch, num_nodes, hidden_dim]
 
-                # Apply adapter per-node (preserve spatial heterogeneity)
-                batch_size, num_nodes, hidden_dim = H_layer.shape
-
-                # Reshape to [batch * num_nodes, hidden_dim] for per-node modulation
-                H_flat = H_layer.reshape(batch_size * num_nodes, hidden_dim)
-
-                # Expand intent labels to match each node
-                intent_label_expanded = intent_label.unsqueeze(1).expand(-1, num_nodes).reshape(-1)  # [batch * num_nodes]
-
-                # Apply adapter (each node gets personalized modulation based on its hidden state)
-                H_mod_flat, adapter_losses = self.adapter(
-                    H_flat,
-                    intent_label_expanded
-                )
-
-                # Reshape back to [batch, num_nodes, hidden_dim]
-                H_mod = H_mod_flat.reshape(batch_size, num_nodes, hidden_dim)
+                # Apply intent-aware modulation to all nodes
+                H_mod = gamma * H_layer + beta  # Broadcast across nodes
                 H_modulated.append(H_mod)
 
-                # Accumulate losses (only from first layer to avoid redundancy)
-                if layer_idx == 0 and 'flow_matching' in adapter_losses:
-                    losses['flow_loss'] = adapter_losses['flow_matching']
+            # Store flow matching loss
+            if 'flow_matching' in adapter_losses:
+                losses['flow_loss'] = adapter_losses['flow_matching']
 
             H_enc = torch.stack(H_modulated, dim=0)
 
