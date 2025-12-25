@@ -338,8 +338,7 @@ class DCRNNWithFlowAdapter(nn.Module):
                 # Apply adapter
                 H_mod_flat, adapter_losses = self.adapter(
                     H_flat,
-                    intent_label,
-                    training=self.training
+                    intent_label
                 )
 
                 # Reshape back
