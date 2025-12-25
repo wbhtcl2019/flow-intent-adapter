@@ -331,18 +331,23 @@ class DCRNNWithFlowAdapter(nn.Module):
             for layer_idx in range(self.num_layers):
                 H_layer = H_enc[layer_idx]  # [batch, num_nodes, hidden_dim]
 
-                # Aggregate spatial info: average pool across nodes
+                # Apply adapter per-node (preserve spatial heterogeneity)
                 batch_size, num_nodes, hidden_dim = H_layer.shape
-                H_pooled = H_layer.mean(dim=1)  # [batch, hidden_dim]
 
-                # Apply adapter to get intent-conditioned features
-                H_mod_pooled, adapter_losses = self.adapter(
-                    H_pooled,
-                    intent_label
+                # Reshape to [batch * num_nodes, hidden_dim] for per-node modulation
+                H_flat = H_layer.reshape(batch_size * num_nodes, hidden_dim)
+
+                # Expand intent labels to match each node
+                intent_label_expanded = intent_label.unsqueeze(1).expand(-1, num_nodes).reshape(-1)  # [batch * num_nodes]
+
+                # Apply adapter (each node gets personalized modulation based on its hidden state)
+                H_mod_flat, adapter_losses = self.adapter(
+                    H_flat,
+                    intent_label_expanded
                 )
 
-                # Broadcast back to all nodes
-                H_mod = H_mod_pooled.unsqueeze(1).expand(-1, num_nodes, -1)  # [batch, num_nodes, hidden_dim]
+                # Reshape back to [batch, num_nodes, hidden_dim]
+                H_mod = H_mod_flat.reshape(batch_size, num_nodes, hidden_dim)
                 H_modulated.append(H_mod)
 
                 # Accumulate losses (only from first layer to avoid redundancy)
