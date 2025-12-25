@@ -331,23 +331,23 @@ class DCRNNWithFlowAdapter(nn.Module):
             for layer_idx in range(self.num_layers):
                 H_layer = H_enc[layer_idx]  # [batch, num_nodes, hidden_dim]
 
-                # Flatten spatial dimension for adapter
+                # Aggregate spatial info: average pool across nodes
                 batch_size, num_nodes, hidden_dim = H_layer.shape
-                H_flat = H_layer.reshape(batch_size, -1)  # [batch, num_nodes * hidden_dim]
+                H_pooled = H_layer.mean(dim=1)  # [batch, hidden_dim]
 
-                # Apply adapter
-                H_mod_flat, adapter_losses = self.adapter(
-                    H_flat,
+                # Apply adapter to get intent-conditioned features
+                H_mod_pooled, adapter_losses = self.adapter(
+                    H_pooled,
                     intent_label
                 )
 
-                # Reshape back
-                H_mod = H_mod_flat.reshape(batch_size, num_nodes, hidden_dim)
+                # Broadcast back to all nodes
+                H_mod = H_mod_pooled.unsqueeze(1).expand(-1, num_nodes, -1)  # [batch, num_nodes, hidden_dim]
                 H_modulated.append(H_mod)
 
                 # Accumulate losses (only from first layer to avoid redundancy)
-                if layer_idx == 0 and 'flow_loss' in adapter_losses:
-                    losses['flow_loss'] = adapter_losses['flow_loss']
+                if layer_idx == 0 and 'flow_matching' in adapter_losses:
+                    losses['flow_loss'] = adapter_losses['flow_matching']
 
             H_enc = torch.stack(H_modulated, dim=0)
 
