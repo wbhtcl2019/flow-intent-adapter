@@ -299,12 +299,16 @@ class DCRNNWithFlowAdapter(nn.Module):
         if use_adapter:
             from latent_flow_intent_adapter import LatentFlowIntentAdapter
 
-            # Adapter for hidden state modulation
+            # Adapter for generating intent representation
             self.adapter = LatentFlowIntentAdapter(
                 feature_dim=hidden_dim,  # Modulate hidden states
                 latent_dim=latent_dim,
                 n_intents=n_intents
             )
+
+            # FiLM parameter generator: maps latent intent to modulation params
+            self.gamma_net = nn.Linear(hidden_dim, hidden_dim)
+            self.beta_net = nn.Linear(hidden_dim, hidden_dim)
 
     def forward(self, X, adj_matrix, intent_label=None, Y_true=None,
                 teacher_forcing_ratio=0.5):
@@ -335,16 +339,20 @@ class DCRNNWithFlowAdapter(nn.Module):
             H_global = H_layer.mean(dim=1)  # [batch, hidden_dim]
 
             # Apply flow adapter ONCE per batch (not per node!)
-            # This generates intent-conditioned modulation parameters
-            H_modulated_global, adapter_losses = self.adapter(
+            # This generates intent-conditioned features
+            H_intent_conditioned, adapter_losses = self.adapter(
                 H_global,
                 intent_label
             )
 
-            # Extract FiLM parameters from modulated features
+            # Generate FiLM parameters from intent-conditioned features
             # γ (gamma) for scaling, β (beta) for shifting
-            gamma = H_modulated_global.unsqueeze(1)  # [batch, 1, hidden_dim]
-            beta = H_global.unsqueeze(1) - H_modulated_global.unsqueeze(1)  # Residual shift
+            gamma = torch.sigmoid(self.gamma_net(H_intent_conditioned))  # [batch, hidden_dim]
+            beta = self.beta_net(H_intent_conditioned)  # [batch, hidden_dim]
+
+            # Expand for broadcasting: [batch, hidden_dim] -> [batch, 1, hidden_dim]
+            gamma = gamma.unsqueeze(1)
+            beta = beta.unsqueeze(1)
 
             # Apply FiLM modulation to all layers
             H_modulated = []
